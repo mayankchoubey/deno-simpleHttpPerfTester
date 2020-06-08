@@ -42,7 +42,7 @@ function processWorkerResponses() {
     const stopTime=new Date(), stopTimeTs=Date.now(), stopTimeUtc=stopTime.toUTCString();
     logDebug(`Test completed at ${stopTimeUtc}`);
     const timeTaken=stopTimeTs-startTimeTs;
-    logDebug(`Test took at ${timeTaken}ms`);
+    logDebug(`Test took ${timeTaken} ms`);
     const result={  TimeTakenMS: timeTaken,
                     TotalRequests: workerResponse.length, 
                     Mean: mean(), 
