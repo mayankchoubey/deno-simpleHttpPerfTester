@@ -43,11 +43,12 @@ function processWorkerResponses() {
     logDebug(`Test completed at ${stopTimeUtc}`);
     const timeTaken=stopTimeTs-startTimeTs;
     logDebug(`Test took at ${timeTaken}ms`);
-    const result={  totalRequests: workerResponse.length, 
-                    mean: mean(), 
-                    median: median(),
-                    min: Math.min(...workerResponse),
-                    max: Math.max(...workerResponse)
+    const result={  TimeTakenMS: timeTaken,
+                    TotalRequests: workerResponse.length, 
+                    Mean: mean(), 
+                    Median: median(),
+                    Min: Math.min(...workerResponse),
+                    Max: Math.max(...workerResponse)
                 };
     console.table(result);
 }
