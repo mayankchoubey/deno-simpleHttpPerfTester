@@ -6,8 +6,8 @@ const DEFAULT_WORKERS=1;
 const DEFAULT_REPEAT=1;
 const DEFAULT_TIMEOUT=5;
 const MAX_TIMEOUT=120;
-const MAX_WORKERS=50;
-const MAX_REPEAT=1000;
+const MAX_WORKERS=500;
+const MAX_REPEAT=10000;
 
 //globals
 let workers: any[]=[], workerResponse: number[]=[];
