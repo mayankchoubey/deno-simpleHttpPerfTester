@@ -8,38 +8,58 @@ const DEFAULT_TIMEOUT=5;
 const MAX_TIMEOUT=120;
 const MAX_WORKERS=500;
 const MAX_REPEAT=10000;
+const REPORT_TYPE_PROGRESS='progress';
+const REPORT_TYPE_RESULT='result';
 
 //globals
-let workers: any[]=[], workerResponse: number[]=[];
+let workers: any[]=[], workerResponse: number[]=[], workerProgress=new Map();
 let finishedWorkers: number=0;
 
-const options=checkArgs(parse(args));
-if(!options) {
-    Deno.exit();
-}
-const startTime=new Date(), startTimeTs=Date.now(), startTimeUtc=startTime.toUTCString();
-logDebug(`Starting test at ${startTimeUtc}`);
-logDebug(`Parameters: Workers=${options.c}, repeat=${options.r}, url=${options.u}, method=${options.m}, timeout=${options.t}`);
-
-for(let i=0; i<options.c; i++)
-    workers.push(new Worker("./worker.ts", { type: "module" }));
-
-for(let i=0; i<options.c; i++)
-    workers[i].postMessage(options);
-
-for(let i=0; i<options.c; i++)
-    workers[i].onmessage=handleMessageFromWorker;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function handleMessageFromWorker(event: any) {
     //console.log('received data from worker ', event.data);
-    workerResponse.push(...event.data);
+    switch(event.data.type) {
+        case REPORT_TYPE_PROGRESS: {
+            handleWorkerProgressEvent(event.data.name, event.data.value);
+            break;
+        }
+
+        case REPORT_TYPE_RESULT: {
+            handleWorkerResultEvent(event.data.value);
+            break;
+        }
+    }
+}
+
+function handleWorkerProgressEvent(name: string, progress: number) {
+    workerProgress.set(name, progress);
+}
+
+function handleWorkerResultEvent(result: number[]) {
+    workerResponse.push(...result);
     finishedWorkers++;
     if(finishedWorkers === options.c)
         processWorkerResponses();
 }
 
-function processWorkerResponses() {
+function printProgress() {
+    const iter = workerProgress[Symbol.iterator]();
+    let finishedRequests=0;
+    for (let item of iter) {
+        finishedRequests+=item[1];
+    }
+    const text=`\rFinished ${finishedRequests} out of ${totalRequests}`;
+    Deno.stdout.write(encoder.encode(text));
+    if(finishedRequests === totalRequests) {
+        clearInterval(intervalHandle);
+        Deno.stdout.write(encoder.encode('\n'));
+    }
+}
+
+async function processWorkerResponses() {
     const stopTime=new Date(), stopTimeTs=Date.now(), stopTimeUtc=stopTime.toUTCString();
+    await sleep(1200);
     logDebug(`Test completed at ${stopTimeUtc}`);
     const timeTaken=stopTimeTs-startTimeTs;
     logDebug(`Test took ${timeTaken} ms`);
@@ -51,6 +71,7 @@ function processWorkerResponses() {
                     Max: Math.max(...workerResponse)
                 };
     console.table(result);
+    Deno.exit();
 }
 
 function mean() {
@@ -93,6 +114,18 @@ function normalizeString(val: string, defaultVal: string) {
     return val;
 }
 
+function preCheckPostBody(data: string) {
+    let ret=true;
+    try {
+        JSON.parse(data);
+    } catch(err) {
+        logError('Post body is not a valid JSON');
+        ret=false;
+    }
+
+    return ret;
+}
+
 function logError(error: any) {
     console.log(error);
 }
@@ -101,3 +134,36 @@ function logDebug(...args: any) {
     if(options['v'])
         console.log(...args);
 }
+
+// Main code -------------------
+
+const options=checkArgs(parse(args));
+if(!options)
+    Deno.exit();
+
+if(options.d && !preCheckPostBody(options.d))
+    Deno.exit();
+
+const   startTime=new Date(), 
+        startTimeTs=Date.now(), 
+        startTimeUtc=startTime.toUTCString(),
+        totalRequests: number=options.c*options.r,
+        encoder = new TextEncoder();
+
+logDebug(`Starting test at ${startTimeUtc}`);
+logDebug(`Parameters: Workers=${options.c}, repeat=${options.r}, url=${options.u}, method=${options.m}, timeout=${options.t}`);
+
+for(let i=0; i<options.c; i++)
+    workers.push(new Worker("./worker.ts", { type: "module" }));
+
+for(let i=0; i<options.c; i++) {
+    const initMsg=Object.assign({}, options, {name: `worker-${i}`});
+    workers[i].postMessage(initMsg);
+}
+
+printProgress();
+const intervalHandle=setInterval(() => printProgress(), 1000);
+
+for(let i=0; i<options.c; i++)
+    workers[i].onmessage=handleMessageFromWorker;
+
