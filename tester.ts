@@ -154,7 +154,7 @@ logDebug(`Starting test at ${startTimeUtc}`);
 logDebug(`Parameters: Workers=${options.c}, repeat=${options.r}, url=${options.u}, method=${options.m}, timeout=${options.t}`);
 
 for(let i=0; i<options.c; i++)
-    workers.push(new Worker("./worker.ts", { type: "module" }));
+    workers.push(new Worker(new URL("./worker.ts", import.meta.url).href, { type: "module" }));
 
 for(let i=0; i<options.c; i++) {
     const initMsg=Object.assign({}, options, {name: `worker-${i}`});
