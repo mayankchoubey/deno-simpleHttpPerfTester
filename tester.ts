@@ -1,10 +1,15 @@
 const { args } = Deno;
 import { parse } from "https://deno.land/std/flags/mod.ts";
+import { writeJson, writeJsonSync } from "https://deno.land/std/fs/mod.ts";
 
 // constants
 const DEFAULT_WORKERS=1;
 const DEFAULT_REPEAT=1;
 const DEFAULT_TIMEOUT=5;
+const REQUEST_TYPE_GET='GET';
+const OUTPUT_FILE_PATH_PREFIX='/var/tmp/denoPerfResults/';
+const OUTPUT_DESTINATION_CONSOLE='CONSOLE';
+const DEFAULT_TEST_NAME='DEFAULT_TEST_NAME_01';
 const MAX_TIMEOUT=120;
 const MAX_WORKERS=500;
 const MAX_REPEAT=10000;
@@ -49,7 +54,7 @@ function printProgress() {
     for (let item of iter) {
         finishedRequests+=item[1];
     }
-    const text=`\rFinished ${finishedRequests} out of ${totalRequests}`;
+    const text=`\r${options.n} : Finished ${finishedRequests} out of ${totalRequests}`;
     Deno.stdout.write(encoder.encode(text));
     if(finishedRequests === totalRequests) {
         clearInterval(intervalHandle);
@@ -63,15 +68,27 @@ async function processWorkerResponses() {
     logDebug(`Test completed at ${stopTimeUtc}`);
     const timeTaken=stopTimeTs-startTimeTs;
     logDebug(`Test took ${timeTaken} ms`);
-    const result={  TimeTakenMS: timeTaken,
+    const testName=`${options.n}__${options.c}_${options.r}`;
+    const result={  TestName: testName,
+                    TimeTakenMS: timeTaken,
                     TotalRequests: workerResponse.length, 
                     Mean: mean(), 
                     Median: median(),
                     Min: Math.min(...workerResponse),
                     Max: Math.max(...workerResponse)
                 };
-    console.table(result);
+    logTestResult(testName, result);
     Deno.exit();
+}
+
+function logTestResult(fileName: string, result: any) {
+    if(options.o === OUTPUT_DESTINATION_CONSOLE) {
+        console.table(result);
+        return;
+    }
+
+    const fullFileName=`${OUTPUT_FILE_PATH_PREFIX}${fileName}`;
+    writeJsonSync(fullFileName, result);
 }
 
 function mean() {
@@ -79,13 +96,13 @@ function mean() {
     for(let i=0; i<workerResponse.length; i++) {
         total += workerResponse[i];
     }
-    return total / workerResponse.length;
+    return (total / workerResponse.length).toFixed(2);
 }
 
 const median = () => {
     const   mid = Math.floor(workerResponse.length / 2),
             nums = [...workerResponse].sort((a, b) => a - b);
-    return workerResponse.length % 2 !== 0 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+    return (workerResponse.length % 2 !== 0 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2).toFixed(2);
 };
 
 function checkArgs(options: any) {
@@ -95,8 +112,10 @@ function checkArgs(options: any) {
         logError('URL must be specified through -u');
         return null;
     }
-    options['m']=normalizeString(options['m'], 'GET');
+    options['m']=normalizeString(options['m'], REQUEST_TYPE_GET);
+    options['o']=normalizeString(options['o'], OUTPUT_DESTINATION_CONSOLE);
     options['t']=normalizeInt(options['t'], DEFAULT_TIMEOUT, MAX_TIMEOUT);
+    options['n']=normalizeString(options['n'], DEFAULT_TEST_NAME);
     return options;
 }
 
@@ -119,14 +138,14 @@ function preCheckPostBody(data: string) {
     try {
         JSON.parse(data);
     } catch(err) {
-        logError('Post body is not a valid JSON');
+        logError('Post body is not a valid JSON', data);
         ret=false;
     }
 
     return ret;
 }
 
-function logError(error: any) {
+function logError(...error: any) {
     console.log(error);
 }
 
