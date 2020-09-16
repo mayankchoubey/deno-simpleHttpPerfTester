@@ -133,7 +133,7 @@ function normalizeString(val: string, defaultVal: string) {
     return val;
 }
 
-function preCheckPostBody(data: string) {
+function preCheckJsonBody(data: string) {
     let ret=true;
     try {
         JSON.parse(data);
@@ -143,6 +143,13 @@ function preCheckPostBody(data: string) {
     }
 
     return ret;
+}
+
+function preCheckFormBody(data: string) {
+    const tokens=data.split('=');
+    if(tokens.length === 2)
+        return true;
+    return false;
 }
 
 function logError(...error: any) {
@@ -160,7 +167,10 @@ const options=checkArgs(parse(args));
 if(!options)
     Deno.exit();
 
-if(options.d && !preCheckPostBody(options.d))
+if(options.d && !preCheckJsonBody(options.d))
+    Deno.exit();
+
+if(options.f && !preCheckFormBody(options.f))
     Deno.exit();
 
 const   startTime=new Date(), 

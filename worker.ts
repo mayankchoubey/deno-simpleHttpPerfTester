@@ -31,9 +31,16 @@ async function runTest(options: any) {
             fetchParams.body=options.d;
             fetchParams.headers={};
             fetchParams.headers['Content-Type']='application/json';
+        } else if(options.f) {
+            const tokens=options.f.split('=');
+            if(tokens.length == 2) {
+                const formData = new FormData();
+                formData.append(tokens[0], tokens[1]);
+                fetchParams.body=formData;
+            }
         }
-        
-        await fetch(options.u, fetchParams);
+
+        const responseData=await fetch(options.u, fetchParams);
         const afterTS=Date.now();
         response.push(afterTS-beforeTS);
     }
