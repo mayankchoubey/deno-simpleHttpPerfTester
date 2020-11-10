@@ -49,6 +49,8 @@ function handleWorkerResultEvent(result: number[]) {
 }
 
 function printProgress() {
+    return;
+
     const iter = workerProgress[Symbol.iterator]();
     let finishedRequests=0;
     for (let item of iter) {
@@ -89,6 +91,7 @@ function logTestResult(fileName: string, result: any) {
 
     const fullFileName=`${OUTPUT_FILE_PATH_PREFIX}${fileName}`;
     writeJsonSync(fullFileName, result);
+    console.log(fullFileName);
 }
 
 function mean() {

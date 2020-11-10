@@ -42,6 +42,7 @@ async function runTest(options: any) {
 
         const responseData=await fetch(options.u, fetchParams);
         const afterTS=Date.now();
+        const json=await responseData.json();
         response.push(afterTS-beforeTS);
     }
     return response;
