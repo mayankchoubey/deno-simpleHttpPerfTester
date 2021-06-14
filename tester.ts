@@ -1,6 +1,5 @@
 const { args } = Deno;
 import { parse } from "https://deno.land/std/flags/mod.ts";
-import { writeJson, writeJsonSync } from "https://deno.land/std/fs/mod.ts";
 
 // constants
 const DEFAULT_WORKERS=1;
@@ -49,8 +48,8 @@ function handleWorkerResultEvent(result: number[]) {
 }
 
 function printProgress() {
-    return;
-
+    if(options.o)
+        return;
     const iter = workerProgress[Symbol.iterator]();
     let finishedRequests=0;
     for (let item of iter) {
@@ -64,6 +63,44 @@ function printProgress() {
     }
 }
 
+function calculateReqPerSec(timeMS:number, numResults:number) {
+    const timeS=timeMS/1000;
+    const rps=numResults/timeS;
+    return parseInt(rps.toFixed(2));
+}
+
+async function calculateReadings(chartFileName:string="") {
+    const ret:any={};
+    Deno.truncateSync("/var/tmp/readings.log");
+    const file = Deno.openSync("/var/tmp/readings.log", { write: true });
+    const encoder=new TextEncoder();
+    for(const val of workerResponse)
+        Deno.writeSync(file.rid, encoder.encode(`${val}\n`));
+    Deno.close(file.rid);
+    const sutType=chartFileName?.split('/')?.pop()?.split('__')[0];
+    const args=`/Users/mayankc/Work/source/deno-simpleHttpPerfTester/calculate.r ${chartFileName} ${sutType === 'deno' ? 'black': 'darkgreen'} ${sutType}`;
+    logDebug(args);
+    const p = Deno.run({
+        cmd: ["Rscript", ...args.split(" ")],
+        stdout: "piped",
+        stderr: "piped",
+    });
+    await p.status();
+    const out=await p.output();
+    const decoder=new TextDecoder();
+    const decodedOutput=decoder.decode(out).split('\n');
+    for(let i=0; i<decodedOutput.length; i++) {
+        let val=decodedOutput[i];
+        if(val.startsWith('$')) {
+            val=val.replace('$', '');
+            val=val.replaceAll('`', '');
+            ret[val]=parseFloat(parseFloat(decodedOutput[i+1].split(' ')[1]).toFixed(2));
+            i++;
+        }
+    }
+    return ret;
+}
+
 async function processWorkerResponses() {
     const stopTime=new Date(), stopTimeTs=Date.now(), stopTimeUtc=stopTime.toUTCString();
     await sleep(1200);
@@ -74,11 +111,9 @@ async function processWorkerResponses() {
     const result={  TestName: testName,
                     TimeTakenMS: timeTaken,
                     TotalRequests: workerResponse.length, 
-                    Mean: mean(), 
-                    Median: median(),
-                    Min: Math.min(...workerResponse),
-                    Max: Math.max(...workerResponse)
+                    ReqPerSec: calculateReqPerSec(timeTaken, workerResponse.length),
                 };
+    Object.assign(result, await calculateReadings(`${options.z}/${options.n}__${options.c}.png`));
     logTestResult(testName, result);
     Deno.exit();
 }
@@ -90,23 +125,13 @@ function logTestResult(fileName: string, result: any) {
     }
 
     const fullFileName=`${OUTPUT_FILE_PATH_PREFIX}${fileName}`;
-    writeJsonSync(fullFileName, result);
+    Deno.writeTextFileSync(fullFileName, JSON.stringify(result));
     console.log(fullFileName);
-}
 
-function mean() {
-    let total=0;
-    for(let i=0; i<workerResponse.length; i++) {
-        total += workerResponse[i];
-    }
-    return (total / workerResponse.length).toFixed(2);
+    const readingsFileName=`${fullFileName.substring(0, fullFileName.lastIndexOf("_"))}.readings`;
+    if(options.k)
+        Deno.writeTextFileSync(readingsFileName, JSON.stringify(workerResponse));
 }
-
-const median = () => {
-    const   mid = Math.floor(workerResponse.length / 2),
-            nums = [...workerResponse].sort((a, b) => a - b);
-    return (workerResponse.length % 2 !== 0 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2).toFixed(2);
-};
 
 function checkArgs(options: any) {
     options['c']=normalizeInt(options['c'], DEFAULT_WORKERS, MAX_WORKERS);
@@ -149,10 +174,13 @@ function preCheckJsonBody(data: string) {
 }
 
 function preCheckFormBody(data: string) {
-    const tokens=data.split('=');
-    if(tokens.length === 2)
-        return true;
-    return false;
+    const fields=data.split(";");
+    for(const field of fields) {
+        const tokens=field.split('=');
+        if(tokens.length !== 2)
+            return false;
+    }
+    return true;
 }
 
 function logError(...error: any) {
@@ -160,7 +188,7 @@ function logError(...error: any) {
 }
 
 function logDebug(...args: any) {
-    if(options['v'])
+    if(options.v)
         console.log(...args);
 }
 
